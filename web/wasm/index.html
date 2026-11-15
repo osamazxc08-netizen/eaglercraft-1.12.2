@@ -53,5 +53,322 @@
 			});
 		</script>
 	</head>
+	(function() {
+    if (document.getElementById('eagler-joystick')) return;
+
+    // 1. حاوية الواجهة الرئيسية
+    const hud = document.createElement('div');
+    hud.id = 'eagler-joystick';
+    hud.style.cssText = `
+        position: fixed;
+        top: 0; left: 0; width: 100%; height: 100%;
+        pointer-events: none;
+        z-index: 99999;
+        user-select: none;
+        font-family: sans-serif;
+    `;
+    document.body.appendChild(hud);
+
+    // --- عصا الحركة (Joystick) على اليسار ---
+    const base = document.createElement('div');
+    base.style.cssText = `
+        position: fixed;
+        bottom: 35px; left: 35px;
+        width: 125px; height: 125px;
+        background: rgba(0, 0, 0, 0.25);
+        border: 2px solid rgba(255, 255, 255, 0.35);
+        border-radius: 50%;
+        pointer-events: auto;
+        touch-action: none;
+        display: flex; align-items: center; justify-content: center;
+    `;
+    hud.appendChild(base);
+
+    const stick = document.createElement('div');
+    stick.style.cssText = `
+        position: absolute;
+        width: 55px; height: 55px;
+        background: rgba(255, 255, 255, 0.45);
+        border: 2px solid rgba(255, 255, 255, 0.8);
+        border-radius: 50%;
+        pointer-events: none;
+        transform: translate(0px, 0px);
+    `;
+    base.appendChild(stick);
+
+    // --- شريط الأدوات السفلي (Hotbar 1-9) ---
+    const hotbarContainer = document.createElement('div');
+    hotbarContainer.style.cssText = `
+        position: fixed;
+        bottom: 12px;
+        left: 50%;
+        transform: translateX(-50%);
+        display: flex;
+        gap: 3px;
+        pointer-events: auto;
+        touch-action: none;
+        background: rgba(0, 0, 0, 0.4);
+        padding: 4px;
+        border-radius: 8px;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+    `;
+    hud.appendChild(hotbarContainer);
+
+    for (let i = 1; i <= 9; i++) {
+        const slot = document.createElement('div');
+        slot.style.cssText = `
+            width: 38px;
+            height: 38px;
+            background: rgba(0, 0, 0, 0.3);
+            border: 2px solid rgba(255, 255, 255, 0.4);
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 12px;
+            font-weight: bold;
+        `;
+        slot.innerText = i;
+
+        slot.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            slot.style.background = 'rgba(255, 255, 255, 0.5)';
+            sendKey(`Digit${i}`, 48 + i, 'keydown');
+        }, { passive: false });
+
+        slot.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            slot.style.background = 'rgba(0, 0, 0, 0.3)';
+            sendKey(`Digit${i}`, 48 + i, 'keyup');
+        }, { passive: false });
+
+        hotbarContainer.appendChild(slot);
+    }
+
+    // زر الحقيبة (...) بجانب شريط الأدوات
+    const invBtn = document.createElement('div');
+    invBtn.innerText = '...';
+    invBtn.style.cssText = `
+        position: fixed;
+        bottom: 16px;
+        left: calc(50% + 205px);
+        width: 38px;
+        height: 38px;
+        background: rgba(0, 0, 0, 0.5);
+        border: 2px solid rgba(255, 255, 255, 0.6);
+        border-radius: 6px;
+        color: white; font-size: 18px; font-weight: bold;
+        display: flex; align-items: center; justify-content: center;
+        pointer-events: auto; touch-action: none;
+    `;
+    invBtn.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        invBtn.style.background = 'rgba(255, 255, 255, 0.5)';
+        sendKey('KeyE', 69, 'keydown');
+    }, { passive: false });
+    invBtn.addEventListener('touchend', (e) => {
+        e.preventDefault();
+        invBtn.style.background = 'rgba(0, 0, 0, 0.5)';
+        sendKey('KeyE', 69, 'keyup');
+    }, { passive: false });
+    hud.appendChild(invBtn);
+
+    // دالة إنشاء الأزرار الجانبية
+    function createButton(text, bottom, right, left, top, width, height, fontSize, onClickDown, onClickUp) {
+        const btn = document.createElement('div');
+        btn.innerText = text;
+        btn.style.cssText = `
+            position: fixed;
+            ${bottom ? 'bottom:' + bottom + ';' : ''}
+            ${right ? 'right:' + right + ';' : ''}
+            ${left ? 'left:' + left + ';' : ''}
+            ${top ? 'top:' + top + ';' : ''}
+            width: ${width}; height: ${height};
+            background: rgba(0, 0, 0, 0.35);
+            border: 2px solid rgba(255, 255, 255, 0.5);
+            border-radius: 10px;
+            color: white; font-size: ${fontSize || '13px'}; font-weight: bold;
+            display: flex; align-items: center; justify-content: center;
+            pointer-events: auto; touch-action: none;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        `;
+
+        btn.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            btn.style.background = 'rgba(255, 255, 255, 0.45)';
+            if (onClickDown) onClickDown();
+        }, { passive: false });
+
+        btn.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            btn.style.background = 'rgba(0, 0, 0, 0.35)';
+            if (onClickUp) onClickUp();
+        }, { passive: false });
+
+        hud.appendChild(btn);
+        return btn;
+    }
+
+    function sendKey(code, keyCode, type) {
+        const event = new KeyboardEvent(type, { code: code, keyCode: keyCode, bubbles: true });
+        document.dispatchEvent(event);
+        window.dispatchEvent(event);
+    }
+
+    function sendMouse(button, type) {
+        const canvas = document.querySelector('canvas');
+        if (!canvas) return;
+        const event = new MouseEvent(type, { button: button, bubbles: true });
+        canvas.dispatchEvent(event);
+    }
+
+    // --- أزرار يمين الشاشة (بيدروك) ---
+    createButton('▲', '20px', '25px', null, null, '75px', '75px', '22px',
+        () => sendKey('Space', 32, 'keydown'), () => sendKey('Space', 32, 'keyup'));
+
+    createButton('تسلل', '105px', '30px', null, null, '50px', '45px', '11px',
+        () => sendKey('ShiftLeft', 16, 'keydown'), () => sendKey('ShiftLeft', 16, 'keyup'));
+
+    createButton('ضرب', '110px', '95px', null, null, '60px', '60px', '12px',
+        () => sendMouse(0, 'mousedown'), () => sendMouse(0, 'mouseup'));
+
+    createButton('بناء', '40px', '110px', null, null, '60px', '60px', '12px',
+        () => sendMouse(2, 'mousedown'), () => sendMouse(2, 'mouseup'));
+
+    // --- أزرار أعلى الشاشة ---
+    createButton('II', null, null, '20px', '15px', '45px', '40px', '14px',
+        () => sendKey('Escape', 27, 'keydown'), () => sendKey('Escape', 27, 'keyup'));
+
+    createButton('💬', null, null, '75px', '15px', '45px', '40px', '14px',
+        () => sendKey('KeyT', 84, 'keydown'), () => sendKey('KeyT', 84, 'keyup'));
+
+    createButton('فيديو', null, '20px', null, '15px', '45px', '40px', '10px',
+        () => sendKey('F5', 116, 'keydown'), () => sendKey('F5', 116, 'keyup'));
+
+    createButton('جري', null, '75px', null, '15px', '45px', '40px', '11px',
+        () => sendKey('ControlLeft', 17, 'keydown'), () => sendKey('ControlLeft', 17, 'keyup'));
+
+    createButton('رمي', null, '130px', null, '15px', '45px', '40px', '11px',
+        () => sendKey('KeyQ', 81, 'keydown'), () => sendKey('KeyQ', 81, 'keyup'));
+
+    createButton('يد', null, '185px', null, '15px', '45px', '40px', '11px',
+        () => sendKey('KeyF', 70, 'keydown'), () => sendKey('KeyF', 70, 'keyup'));
+
+
+    // --- التحكم بالحركة عبر العصا (Joystick) مع عдо المعرفات ---
+    let activeKeys = { KeyW: false, KeyS: false, KeyA: false, KeyD: false };
+    function updateKeys(newKeys) {
+        for (let key in activeKeys) {
+            if (activeKeys[key] !== newKeys[key]) {
+                activeKeys[key] = newKeys[key];
+                sendKey(key, key === 'KeyW' ? 87 : key === 'KeyS' ? 83 : key === 'KeyA' ? 65 : 68, newKeys[key] ? 'keydown' : 'keyup');
+            }
+        }
+    }
+
+    let touchId = null;
+    const baseRadius = 55;
+
+    base.addEventListener('touchstart', (e) => {
+        if (touchId !== null) return;
+        const touch = e.changedTouches[0];
+        touchId = touch.identifier;
+        handleTouch(touch);
+    }, { passive: false });
+
+    window.addEventListener('touchmove', (e) => {
+        if (touchId === null) return;
+        for (let i = 0; i < e.changedTouches.length; i++) {
+            if (e.changedTouches[i].identifier === touchId) {
+                handleTouch(e.changedTouches[i]);
+                break;
+            }
+        }
+    }, { passive: false });
+
+    window.addEventListener('touchend', (e) => {
+        if (touchId === null) return;
+        for (let i = 0; i < e.changedTouches.length; i++) {
+            if (e.changedTouches[i].identifier === touchId) {
+                touchId = null;
+                stick.style.transform = `translate(0px, 0px)`;
+                updateKeys({ KeyW: false, KeyS: false, KeyA: false, KeyD: false });
+                break;
+            }
+        }
+    }, { passive: false });
+
+    function handleTouch(touch) {
+        const rect = base.getBoundingClientRect();
+        const centerX = rect.left + rect.width / 2;
+        const centerY = rect.top + rect.height / 2;
+
+        let dx = touch.clientX - centerX;
+        let dy = touch.clientY - centerY;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+
+        if (distance > baseRadius) {
+            dx = (dx / distance) * baseRadius;
+            dy = (dy / distance) * baseRadius;
+        }
+
+        stick.style.transform = `translate(${dx}px, ${dy}px)`;
+
+        const threshold = 12;
+        updateKeys({
+            KeyW: dy < -threshold,
+            KeyS: dy > threshold,
+            KeyA: dx < -threshold,
+            KeyD: dx > threshold
+        });
+    }
+
+    // --- تحريك الكاميرا باللمس مع منع تداخل الـ Touch ---
+    let cameraTouchId = null;
+    let lastX = 0, lastY = 0;
+    const canvas = document.querySelector('canvas');
+    
+    if (canvas) {
+        canvas.addEventListener('touchstart', (e) => {
+            if (cameraTouchId !== null || e.target !== canvas) return;
+            const touch = e.changedTouches[0];
+            cameraTouchId = touch.identifier;
+            lastX = touch.clientX;
+            lastY = touch.clientY;
+        }, { passive: true });
+
+        canvas.addEventListener('touchmove', (e) => {
+            if (cameraTouchId === null) return;
+            for (let i = 0; i < e.changedTouches.length; i++) {
+                const touch = e.changedTouches[i];
+                if (touch.identifier === cameraTouchId) {
+                    const dx = (touch.clientX - lastX) * 2.0;
+                    const dy = (touch.clientY - lastY) * 2.0;
+                    lastX = touch.clientX;
+                    lastY = touch.clientY;
+
+                    const mouseEvent = new MouseEvent('mousemove', {
+                        movementX: dx,
+                        movementY: dy,
+                        bubbles: true
+                    });
+                    canvas.dispatchEvent(mouseEvent);
+                    break;
+                }
+            }
+        }, { passive: true });
+
+        canvas.addEventListener('touchend', (e) => {
+            if (cameraTouchId === null) return;
+            for (let i = 0; i < e.changedTouches.length; i++) {
+                if (e.changedTouches[i].identifier === cameraTouchId) {
+                    cameraTouchId = null;
+                    break;
+                }
+            }
+        }, { passive: true });
+    }
+})();
 	<body style="margin:0px;width:100%;height:100%;overflow:hidden;background-color:black;" id="game_frame"></body>
 </html>
