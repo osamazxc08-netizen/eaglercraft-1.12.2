@@ -53,5 +53,118 @@
 			});
 		</script>
 	</head>
+	<!-- بداية كود أزرار اللمس المدمج والمدقق -->
+<script>
+window.addEventListener('load', function() {
+  if (document.getElementById('mc-touch-ui')) return;
+
+  // تجاوز قفل الماوس وتفعيل التركيز التلقائي على اللعبة
+  const checkCanvas = setInterval(() => {
+    const cv = document.querySelector('canvas');
+    if (cv) {
+      clearInterval(checkCanvas);
+      cv.setAttribute('tabindex', '0');
+      cv.focus();
+      cv.requestPointerLock = function() {
+        Object.defineProperty(document, 'pointerLockElement', { value: cv, configurable: true });
+        document.dispatchEvent(new Event('pointerlockchange'));
+      };
+    }
+  }, 500);
+
+  const ui = document.createElement('div');
+  ui.id = 'mc-touch-ui';
+  ui.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;pointer-events:none;z-index:999999;user-select:none;font-family:sans-serif;';
+  document.body.appendChild(ui);
+
+  function sendKey(code, key, keyCode, type) {
+    const target = document.querySelector('canvas') || document;
+    if (target.focus) target.focus();
+    const ev = new KeyboardEvent(type, { code, key, keyCode, which: keyCode, bubbles: true, cancelable: true });
+    target.dispatchEvent(ev);
+    document.dispatchEvent(ev);
+    window.dispatchEvent(ev);
+  }
+
+  function sendMouse(button, type) {
+    const canvas = document.querySelector('canvas') || document.body;
+    if (canvas.focus) canvas.focus();
+    const ev = new MouseEvent(type, { button, buttons: type === 'mousedown' ? (button === 2 ? 2 : 1) : 0, bubbles: true, cancelable: true });
+    canvas.dispatchEvent(ev);
+  }
+
+  function makeBtn(label, left, right, bottom, top, w, h, onDown, onUp) {
+    const b = document.createElement('div');
+    b.innerText = label;
+    b.style.cssText = `position:fixed;${left?'left:'+left+';':''}${right?'right:'+right+';':''}${bottom?'bottom:'+bottom+';':''}${top?'top:'+top+';':''}width:${w};height:${h};background:rgba(0,0,0,0.45);border:2px solid rgba(255,255,255,0.4);border-radius:10px;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:bold;font-size:14px;pointer-events:auto;touch-action:none;`;
+    b.addEventListener('touchstart', e => { e.preventDefault(); e.stopPropagation(); b.style.background = 'rgba(255,255,255,0.4)'; onDown(); }, { passive: false });
+    b.addEventListener('touchend', e => { e.preventDefault(); e.stopPropagation(); b.style.background = 'rgba(0,0,0,0.45)'; onUp(); }, { passive: false });
+    b.addEventListener('touchcancel', e => { e.preventDefault(); b.style.background = 'rgba(0,0,0,0.45)'; onUp(); }, { passive: false });
+    ui.appendChild(b);
+  }
+
+  // أزرار الحركة (يسار الشاشة)
+  makeBtn('▲', '70px', null, '130px', null, '50px', '50px', () => sendKey('KeyW','w',87,'keydown'), () => sendKey('KeyW','w',87,'keyup'));
+  makeBtn('▼', '70px', null, '20px', null, '50px', '50px', () => sendKey('KeyS','s',83,'keydown'), () => sendKey('KeyS','s',83,'keyup'));
+  makeBtn('◄', '15px', null, '75px', null, '50px', '50px', () => sendKey('KeyA','a',65,'keydown'), () => sendKey('KeyA','a',65,'keyup'));
+  makeBtn('►', '125px', null, '75px', null, '50px', '50px', () => sendKey('KeyD','d',68,'keydown'), () => sendKey('KeyD','d',68,'keyup'));
+  makeBtn('Shift', '70px', null, '75px', null, '50px', '50px', () => sendKey('ShiftLeft','Shift',16,'keydown'), () => sendKey('ShiftLeft','Shift',16,'keyup'));
+
+  // أزرار الأكشن (يمين الشاشة)
+  makeBtn('Jump', null, '20px', '25px', null, '65px', '65px', () => sendKey('Space',' ',32,'keydown'), () => sendKey('Space',' ',32,'keyup'));
+  makeBtn('ضرب', null, '100px', '95px', null, '60px', '55px', () => sendMouse(0,'mousedown'), () => sendMouse(0,'mouseup'));
+  makeBtn('بناء', null, '25px', '105px', null, '60px', '55px', () => sendMouse(2,'mousedown'), () => sendMouse(2,'mouseup'));
+
+  // أزرار القوائم (أعلى الشاشة)
+  makeBtn('E (حقيبة)', null, '20px', null, '15px', '75px', '38px', () => sendKey('KeyE','e',69,'keydown'), () => sendKey('KeyE','e',69,'keyup'));
+  makeBtn('ESC', '20px', null, null, '15px', '55px', '38px', () => sendKey('Escape','Escape',27,'keydown'), () => sendKey('Escape','Escape',27,'keyup'));
+
+  // منطقة تحريك الكاميرا بالسحب (تدعم تعدد الأصابع)
+  const lookPad = document.createElement('div');
+  lookPad.style.cssText = 'position:fixed;top:0;right:0;width:55vw;height:100vh;pointer-events:auto;touch-action:none;z-index:-1;';
+  ui.appendChild(lookPad);
+  let lookTouchId = null, lastX = 0, lastY = 0;
+
+  lookPad.addEventListener('touchstart', e => {
+    if (lookTouchId === null && e.changedTouches.length > 0) {
+      const t = e.changedTouches;
+      lookTouchId = t.identifier;
+      lastX = t.clientX;
+      lastY = t.clientY;
+    }
+  }, { passive: false });
+
+  lookPad.addEventListener('touchmove', e => {
+    e.preventDefault();
+    for (let i = 0; i < e.changedTouches.length; i++) {
+      const t = e.changedTouches[i];
+      if (t.identifier === lookTouchId) {
+        const dx = (t.clientX - lastX) * 2.5;
+        const dy = (t.clientY - lastY) * 2.5;
+        lastX = t.clientX;
+        lastY = t.clientY;
+        const canvas = document.querySelector('canvas');
+        if (canvas) {
+          canvas.dispatchEvent(new MouseEvent('mousemove', { movementX: dx, movementY: dy, bubbles: true }));
+        }
+        break;
+      }
+    }
+  }, { passive: false });
+
+  const endLook = e => {
+    for (let i = 0; i < e.changedTouches.length; i++) {
+      if (e.changedTouches[i].identifier === lookTouchId) {
+        lookTouchId = null;
+        break;
+      }
+    }
+  };
+  lookPad.addEventListener('touchend', endLook, { passive: false });
+  lookPad.addEventListener('touchcancel', endLook, { passive: false });
+});
+</script>
+<!-- نهاية كود أزرار اللمس المدمج -->
+
 	<body style="margin:0px;width:100%;height:100%;overflow:hidden;background-color:black;" id="game_frame"></body>
 </html>
