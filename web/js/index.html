@@ -33,6 +33,122 @@
 			});
 		</script>
 	</head>
+	(function() {
+    if (document.getElementById('eagler-joystick')) return;
+
+    // 1. حاوية عصا التحكم (المنطقة الخارجية)
+    const base = document.createElement('div');
+    base.id = 'eagler-joystick';
+    base.style.cssText = `
+        position: fixed;
+        bottom: 30px;
+        left: 30px;
+        width: 120px;
+        height: 120px;
+        background: rgba(255, 255, 255, 0.15);
+        border: 2px solid rgba(255, 255, 255, 0.4);
+        border-radius: 50%;
+        pointer-events: auto;
+        touch-action: none;
+        z-index: 99999;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    `;
+    document.body.appendChild(base);
+
+    // مقبض عصا التحكم (القطعة المتحركة بالداخل)
+    const stick = document.createElement('div');
+    stick.style.cssText = `
+        position: absolute;
+        width: 50px;
+        height: 50px;
+        background: rgba(255, 255, 255, 0.5);
+        border: 2px solid white;
+        border-radius: 50%;
+        pointer-events: none;
+        transition: transform 0.05s linear;
+    `;
+    base.appendChild(stick);
+
+    // حالة الأزرار النشطة حالياً
+    let activeKeys = { KeyW: false, KeyS: false, KeyA: false, KeyD: false };
+
+    function sendKey(code, type) {
+        const event = new KeyboardEvent(type, { code: code, bubbles: true });
+        document.dispatchEvent(event);
+        window.dispatchEvent(event);
+    }
+
+    function updateKeys(newKeys) {
+        for (let key in activeKeys) {
+            if (activeKeys[key] !== newKeys[key]) {
+                activeKeys[key] = newKeys[key];
+                sendKey(key, newKeys[key] ? 'keydown' : 'keyup');
+            }
+        }
+    }
+
+    // تتبع اللمس على عصا التحكم
+    let touchId = null;
+    const baseRadius = 60; // نصف قطر القاعدة
+
+    base.addEventListener('touchstart', (e) => {
+        if (touchId !== null) return;
+        const touch = e.changedTouches[0];
+        touchId = touch.identifier;
+        handleTouch(touch);
+    }, { passive: false });
+
+    window.addEventListener('touchmove', (e) => {
+        if (touchId === null) return;
+        for (let i = 0; i < e.changedTouches.length; i++) {
+            if (e.changedTouches[i].identifier === touchId) {
+                handleTouch(e.changedTouches[i]);
+                break;
+            }
+        }
+    }, { passive: false });
+
+    window.addEventListener('touchend', (e) => {
+        if (touchId === null) return;
+        for (let i = 0; i < e.changedTouches.length; i++) {
+            if (e.changedTouches[i].identifier === touchId) {
+                touchId = null;
+                stick.style.transform = `translate(0px, 0px)`;
+                updateKeys({ KeyW: false, KeyS: false, KeyA: false, KeyD: false });
+                break;
+            }
+        }
+    });
+
+    function handleTouch(touch) {
+        const rect = base.getBoundingClientRect();
+        const centerX = rect.left + rect.width / 2;
+        const centerY = rect.top + rect.height / 2;
+
+        let dx = touch.clientX - centerX;
+        let dy = touch.clientY - centerY;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+
+        // قصر حركة المقبض داخل حدود الدائرة
+        if (distance > baseRadius) {
+            dx = (dx / distance) * baseRadius;
+            dy = (dy / distance) * baseRadius;
+        }
+
+        stick.style.transform = `translate(${dx}px, ${dy}px)`;
+
+        // تحديد الاتجاهات بناءً على إحداثيات السحب
+        const threshold = 15; // عتبة الحساسية للاتجاه
+        updateKeys({
+            KeyW: dy < -threshold,
+            KeyS: dy > threshold,
+            KeyA: dx < -threshold,
+            KeyD: dx > threshold
+        });
+    }
+})();
 	<body style="margin:0px;width:100%;height:100%;overflow:hidden;background-color:black;" id="game_frame">
 	</body>
 </html>
